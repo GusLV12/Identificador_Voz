@@ -64,7 +64,7 @@ class AnalizadorVozApp:
         )
         self.lbl_estado.pack(fill=tk.X, pady=10)
 
-        ttk.Button(panel, text="Grabar audio (5 segundos)",
+        ttk.Button(panel, text="Grabar audio...",
                    style="Panel.TButton", command=self.iniciar_grabacion).pack(fill=tk.X, pady=5)
 
         ttk.Button(panel, text="Reproducir audio",

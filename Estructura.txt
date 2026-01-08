@@ -1,0 +1,9 @@
+Proyecto: Identificador de Vocales y Sílabas con Audio
+Contiene interfaz gráfica, grabación, visualización y predicción.
+Estructura:
+ - main.py: interfaz principal
+ - grabacion.py: funciones para grabar con cuenta regresiva
+ - graficas.py: funciones para graficar la onda, espectrograma y DFT
+ - utils/: predicción y extracción de características
+ - modelos/: modelos .pkl de vocales, género, etc.
+ - audios/: almacena 'temp_audio.wav' grabado por el usuario

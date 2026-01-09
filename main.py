@@ -1,4 +1,3 @@
-# main.py
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
@@ -12,15 +11,15 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from ui_theme import apply_theme, COLORS
+from prediccion import predecir_vocal
 
-# Compatibilidad librosa + numpy
-np.complex = complex
+# ───────────────────────── CONFIGURACIÓN ─────────────────────────
 
-# Configuración
-DURACION = 5
+np.complex = complex  # Compatibilidad librosa + numpy
+
+DURACION = 2
 FS = 44100
 AUDIO_PATH = "audios/temp_audio.wav"
-
 
 class AnalizadorVozApp:
 
@@ -55,23 +54,43 @@ class AnalizadorVozApp:
         panel.grid(row=0, column=0, sticky="ns", padx=(0, 12))
 
         ttk.Label(panel, text="ANALIZADOR DE VOZ", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(panel, text="Análisis y visualización de señales acústicas",
-                  style="Subtitle.TLabel").pack(anchor="w", pady=(0, 15))
+        ttk.Label(
+            panel,
+            text="Análisis DSP + Clasificación por IA",
+            style="Subtitle.TLabel"
+        ).pack(anchor="w", pady=(0, 15))
 
         self.lbl_estado = tk.Label(
-            panel, text="", bg=COLORS["panel"], fg=COLORS["text"],
-            font=("Consolas", 10), justify="left", wraplength=260
+            panel,
+            text="",
+            bg=COLORS["panel"],
+            fg=COLORS["text"],
+            font=("Consolas", 10),
+            justify="left",
+            wraplength=260
         )
         self.lbl_estado.pack(fill=tk.X, pady=10)
 
-        ttk.Button(panel, text="Grabar audio...",
-                   style="Panel.TButton", command=self.iniciar_grabacion).pack(fill=tk.X, pady=5)
+        ttk.Button(
+            panel,
+            text="Grabar audio (2 s)",
+            style="Panel.TButton",
+            command=self.iniciar_grabacion
+        ).pack(fill=tk.X, pady=5)
 
-        ttk.Button(panel, text="Reproducir audio",
-                   style="Panel.TButton", command=self.reproducir_audio).pack(fill=tk.X, pady=5)
+        ttk.Button(
+            panel,
+            text="Reproducir audio",
+            style="Panel.TButton",
+            command=self.reproducir_audio
+        ).pack(fill=tk.X, pady=5)
 
-        ttk.Button(panel, text="Información del sistema",
-                   style="Panel.TButton", command=self.mostrar_info).pack(fill=tk.X, pady=5)
+        ttk.Button(
+            panel,
+            text="Información del sistema",
+            style="Panel.TButton",
+            command=self.mostrar_info
+        ).pack(fill=tk.X, pady=5)
 
     def crear_dashboard(self):
         dash = tk.Frame(self.contenedor_principal, bg=COLORS["bg"])
@@ -85,13 +104,19 @@ class AnalizadorVozApp:
         self.card_wave = self.crear_tarjeta(dash, "Señal en el dominio del tiempo", 0, 0)
         self.card_fft = self.crear_tarjeta(dash, "Espectro de frecuencias", 0, 1)
         self.card_spec = self.crear_tarjeta(dash, "Espectrograma (STFT)", 1, 0)
-        self.card_metrics = self.crear_tarjeta(dash, "Métricas acústicas", 1, 1)
+        self.card_metrics = self.crear_tarjeta(dash, "Métricas acústicas y resultado IA", 1, 1)
 
     def crear_tarjeta(self, parent, titulo, fila, columna):
         frame = tk.LabelFrame(
-            parent, text=titulo, bg=COLORS["card"], fg=COLORS["muted"],
-            font=("Segoe UI", 10, "bold"), bd=1, relief="solid",
-            padx=10, pady=10
+            parent,
+            text=titulo,
+            bg=COLORS["card"],
+            fg=COLORS["muted"],
+            font=("Segoe UI", 10, "bold"),
+            bd=1,
+            relief="solid",
+            padx=10,
+            pady=10
         )
         frame.grid(row=fila, column=columna, sticky="nsew", padx=8, pady=8)
         return frame
@@ -110,7 +135,12 @@ class AnalizadorVozApp:
         self.actualizar_estado("Grabando audio...\nHable claramente.", COLORS["muted"])
 
         try:
-            audio = sd.rec(int(DURACION * FS), samplerate=FS, channels=1, dtype="float32")
+            audio = sd.rec(
+                int(DURACION * FS),
+                samplerate=FS,
+                channels=1,
+                dtype="float32"
+            )
             sd.wait()
 
             os.makedirs("audios", exist_ok=True)
@@ -158,30 +188,48 @@ class AnalizadorVozApp:
 
     def graficar_espectrograma(self, y, sr):
         self.limpiar(self.card_spec)
-        S = librosa.amplitude_to_db(abs(librosa.stft(y)), ref=np.max)
+        S = librosa.amplitude_to_db(np.abs(librosa.stft(y)), ref=np.max)
         fig, ax = plt.subplots(figsize=(6, 3), dpi=90)
         librosa.display.specshow(S, sr=sr, cmap="gray_r", ax=ax)
         ax.set_title("Espectrograma en decibelios")
         FigureCanvasTkAgg(fig, master=self.card_spec).get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-    # ───────────────────────── MÉTRICAS ─────────────────────────
+    # ───────────────────────── MÉTRICAS + IA ─────────────────────────
 
     def calcular_metricas(self, y, sr):
         self.limpiar(self.card_metrics)
 
+        # ===== DSP =====
         rms = np.mean(librosa.feature.rms(y=y))
         zcr = np.mean(librosa.feature.zero_crossing_rate(y))
         centroid = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr))
         bandwidth = np.mean(librosa.feature.spectral_bandwidth(y=y, sr=sr))
-        pitch = np.mean(librosa.yin(y, fmin=80, fmax=300))
+        pitch = np.nanmean(librosa.yin(y, fmin=80, fmax=300))
 
         texto = (
-            f"RMS promedio            : {rms:.4f}\n"
-            f"ZCR promedio            : {zcr:.4f}\n"
-            f"Centroide espectral     : {centroid:.2f} Hz\n"
-            f"Ancho de banda          : {bandwidth:.2f} Hz\n"
-            f"Pitch estimado          : {pitch:.2f} Hz"
+            "MÉTRICAS ACÚSTICAS (DSP)\n"
+            f"RMS promedio        : {rms:.4f}\n"
+            f"ZCR promedio        : {zcr:.4f}\n"
+            f"Centroide espectral : {centroid:.2f} Hz\n"
+            f"Ancho de banda      : {bandwidth:.2f} Hz\n"
+            f"Pitch (F0)          : {pitch:.2f} Hz\n\n"
         )
+
+        # ===== IA =====
+        try:
+            resultado = predecir_vocal(AUDIO_PATH)
+
+            texto += (
+                "RESULTADO DE IA\n"
+                f"Tipo detectado      : {resultado.get('tipo', 'N/D')}\n"
+                f"Etiqueta            : {resultado.get('etiqueta', 'N/D')}\n"
+                f"Género              : {resultado.get('genero', 'N/D')}\n"
+                f"Tipo de voz         : {resultado.get('voz', 'N/D')}\n"
+                f"Confianza           : {resultado.get('confianza', 0):.1f} %\n"
+            )
+
+        except Exception:
+            texto += "\nRESULTADO DE IA\nNo disponible\n"
 
         tk.Label(
             self.card_metrics,
@@ -201,10 +249,10 @@ class AnalizadorVozApp:
     def mostrar_info(self):
         messagebox.showinfo(
             "Información del sistema",
-            "Panel de análisis acústico\n\n"
-            "Métricas calculadas:\n"
-            "- RMS\n- ZCR\n- Centroide espectral\n- Ancho de banda\n- Pitch\n\n"
-            "Análisis puramente DSP."
+            "Sistema de análisis de voz\n\n"
+            "1) Extracción de características acústicas (DSP)\n"
+            "2) Clasificación mediante modelos de IA\n\n"
+            "Proyecto académico – Procesamiento Digital de Señales"
         )
 
 
